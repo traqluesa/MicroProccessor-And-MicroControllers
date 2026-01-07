@@ -1,0 +1,121 @@
+***** DeedsMcE Project File *****
+* If you read this message, you need to install the last version of Deeds! *
+FVR 3
+SYS 1
+CPU 1
+FCK 2
+ROM 4
+RAM 4
+PIA 0
+PIB 1
+PIC 2
+PID 3
+PIE 4
+PIF 5
+PIG 6
+PIH 7
+POA 0
+POB 1
+POC 2
+POD 3
+POE 4
+POF 5
+POG 6
+POH 7
+INT 007 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+INT 006 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+INT 005 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+INT 004 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+INT 003 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+INT 002 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+INT 001 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+INT 000 SRC 002 PRT 000 TMD 001 TIN 019 EIN 003 
+******* Project File END ********
+; * CPU 1: CONTROL + COUNTER + HEARTBEAT *
+;
+
+        ORG 0000H
+        JP START
+
+
+START:
+        LD C, 00H       ; Fault counter (for 7-seg display)
+        LD D, 00H       ; Previous FAULT state (bit1)
+
+
+MAIN_LOOP:
+        IN A, (01H)     ; Read input port (TESTER + FAULT)
+        LD E, A         ; Backup inputs (E = copy of inputs)
+
+
+        ; --- LED SIGNAL (TESTER - Bit 0) ---
+        AND 01H         ; Mask bit0 (TESTER)
+        OUT (01H), A    ; Send to CPU2 (normal data)
+
+
+        ; --- FAULT COUNTER SECTION (Bit 1) ---
+        LD A, E         ; Restore input backup
+        AND 02H         ; Mask bit1 (FAULT)
+
+        CP D            ; Compare with previous FAULT state
+        JP Z, STORE     ; No change › skip counting, go store state
+
+        LD D, A         ; Save new FAULT state
+
+
+        CP 02H          ; Is bit1 = 1? (rising edge 0 › 1)
+        JP NZ, MAIN_LOOP ; If not (falling edge), do not increment
+
+        INC C           ; Increment fault counter on rising edge
+
+        ; Display on 7-segment
+        LD A, C
+        OUT (00H), A    ; Send counter value to 7-seg display
+
+
+        ; ===== HEARTBEAT =====
+        LD A, 55H       ; Heartbeat code
+        OUT (01H), A    ; Send "I'm alive" signal to CPU2
+        ; =====================
+
+
+; ===== DAC PULSE (made visible) =====
+        LD A, 0FH
+        OUT (02H), A    ; Send high value to DAC
+
+        ; ---- add delay (for visibility) ----
+        LD B, 0FFH
+
+DAC_WAIT:
+        DEC B
+        JP NZ, DAC_WAIT
+        ; -----------------------------------
+
+        LD A, 00H
+        OUT (02H), A    ; Pull DAC output back to 0
+; ===================================
+
+
+        LD B, 00H       ; Outer delay counter = 0
+
+DELAY_OUTER:
+        LD A, 00H       ; Inner delay counter = 0
+
+DELAY_INNER:
+        INC A
+        CP 0FFH         ; Reached 0FFH?
+        JP NZ, DELAY_INNER
+
+        INC B
+        CP 0FFH         ; Reached 0FFH?
+        JP NZ, DELAY_OUTER
+
+        ; ===== DELAY FINISHED =====
+
+
+STORE:
+        LD A, E         ; Restore input backup
+        AND 02H         ; Mask FAULT bit
+        LD D, A         ; Update previous FAULT state
+
+        JP MAIN_LOOP    ; Return to main loop
